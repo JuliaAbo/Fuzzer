@@ -1,5 +1,5 @@
 # Fuzzer
-For example, a calculator script might not correctly handle an input of a string. The fuzzer outputs which arguments failed and which ones did not. 
+A tool to find what edge cases have not been accounted for in programs. For example, a calculator script might not correctly handle an input of a string. The fuzzer outputs which arguments failed and which ones did not. 
 
 ## How it works
 
