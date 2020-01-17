@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+
+# Useful functions for dealing with files and file paths
+import sys, os
+
+# Deals with the command line arguments to the fuzzer
+import argparse
+
+# Used for parsing the model specification XML file
+import xml.etree.ElementTree as ET
+
+# Utility function for printing "pretty" lists, tuples, etc.
+import pprint
+
+# Extremely useful functions in here ;)
+import itertools
+
+# Why would we need this module?
+import subprocess
+from subprocess import * 
+# Loads the model specification from a given XML file.
+# No need to modify this function.
+def load_model(xml_file):
+    try:
+        tree = ET.parse(xml_file)
+    except:
+        print('Error: Unable to parse the given XML file. Perhaps it has a syntax error?')
+        sys.exit(-1)
+        
+    root = tree.getroot()
+    
+    optional_args = []
+    positional_args = []
+
+    opts = root.find('options')
+    if opts:
+        for opt in opts.iter('option'):
+            optional_args.append((opt[0].text, opt[1].text))
+
+    pos = root.find('positional')
+    if pos:
+        for arg in pos.iter('arg'):
+            positional_args.append(arg[0].text)
+    return optional_args, positional_args
+
+# Exit the fuzzer if a non-existant file is passed in as a command line argument
+# No need to modify this function.
+def ensure_file_existence(file_path):
+    if not os.path.isfile(file_path):
+        print('Error: the file {} does not exist. Please check the path'.format(file_path))
+        sys.exit(-1)
+
+# Handle the command line arguments for the fuzzer.
+# No need to modify this function.
+def handle_cmd_line():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config")
+    parser.add_argument("binary")
+    args = parser.parse_args()
+
+    if not args.config.endswith('.xml'):
+        print('Error: the first parameter should end in an .xml extension')
+        sys.exit(-1)
+
+    ensure_file_existence(args.config)
+    ensure_file_existence(args.binary)
+
+    if not os.access(args.binary, os.X_OK):
+        print('Error: {} is not executable'.format(args.binary))
+        sys.exit(-1)
+
+    return args
+
+# main() begins here
+def main():
+	integers = [0, 1, 1.0, -1, 1000000000000005555000000000000000000000000000000000000, "a", "+",] 
+	strings = ["s", "S", "0", 1, "https://www.google.com", "+",] 
+	nulls = [1]
+# create the list of all optional arguments 
+	j = 0 
+	optionalList = []
+	while j < len(opts):
+		optionalList.append(opts[j])
+		j = j + 1 
+# creates the powerset of optional arguments 
+# powerset code from https://stackoverflow.com/questions/18035595/powersets-in-python-using-itertools
+	from itertools import chain, combinations 
+	def powerset(iterable):
+		s = list(iterable)
+		return chain.from_iterable(combinations(s,r) for r in range(len(s) +1))
+	optsList = (powerset(optionalList))
+	uniqueRes = list(set(optsList))
+# create the list of all positional arguments 
+	i = 0
+	positionalList = []
+	pargsSize = len(pargs) 
+	while i < pargsSize:
+		positionalList.append(pargs[i])
+		i = i + 1
+# create the sublist 
+# sublist code from https://www.w3resource.com/python-exercises/list/python-data-type-list-exercise-33.php
+	def sub_lists(my_list):
+		subs = [[]]
+		length = len(my_list)
+		for i in range(length):
+			n = i+1
+			while n <= length:
+				sub = my_list[i:n]
+				subs.append(sub)
+				n += 1
+		return subs
+# creates the sublist of positional arguments
+	pargsList = sub_lists(positionalList)
+# combine the two lists into one
+	combinedArr = []
+	for item in uniqueRes: 
+		for each in pargsList: 
+			toApp = []
+			toApp.append(item)
+			toApp.append(each) 
+			combinedArr.append(toApp)
+# Deals with the creating arguments to pass through, and passing them into an array
+	countInt = 0
+	countString = 0
+	countNull = 0
+	ArrToPass = []
+	hasInt = False
+	hasString = False 
+	while True:
+		for item in combinedArr: 
+			eachArgArr = ["python3", args.binary]
+			for each in item:
+				if isinstance(each, tuple):
+					for every in each: 
+						if every[1] == "integer" :
+							hasInt = True
+							eachArgArr.append(every[0])
+							intVal = integers[countInt % len(integers)]
+							asString = str(intVal)
+							eachArgArr.append(asString)
+							countInt += 1
+						if every[1] == "string" :
+							hasString = True 
+							eachArgArr.append(every[0])
+							stVal = strings[countString % len(strings)]
+							asString = str(stVal)
+							eachArgArr.append(asString)
+							countString += 1
+						if every[1] == "null" :
+							eachArgArr.append(every[0])
+							nullVal = nulls[countNull % len(nulls)]
+							asString = str(nullVal)
+							eachArgArr.append(" ")
+							countNull += 1
+				else:
+					if isinstance(each, list):
+						for picker in each:
+							if picker == "integer" :
+								hasInt = True 
+								intVal = integers[countInt % len(integers)]
+								asString = str(intVal)
+								eachArgArr.append(asString)
+								countInt += 1
+							elif picker == "string":
+								hasString = True 
+								stVal = strings[countString % len(strings)]
+								asString = str(stVal)
+								eachArgArr.append(asString)
+								countString += 1
+							elif picker == "null" :
+								nullVal = nulls[countNull % len(nulls)]
+								asString = str(nullVal)
+								eachArgArr.append(asString)
+								countNull += 1
+				ArrToPass.append(eachArgArr)
+		passedInt = countInt > len(integers)
+		passedString = countString > len(strings)
+		if hasInt == passedInt and hasString == passedString:
+			break
+# pass the arguments to subprocess to run them
+	from subprocess import Popen, PIPE 
+	for item in ArrToPass:
+		process = Popen(item, stdout=PIPE, stderr=PIPE) 
+		stdout, stderr = process.communicate()
+		stderr = stderr.decode()	
+		if "Traceback" in stderr: 
+			emptySt = "" 
+			outputCount = 1
+			while outputCount < len(item): 
+				emptySt += " "
+				emptySt += str(item[outputCount])
+				outputCount += 1
+			print("./", emptySt)
+# Deal with the command line. The parameter values will be available in
+# args.config and args.binary.
+args = handle_cmd_line()
+
+# Load the model specification.
+opts, pargs = load_model(args.config)
+
+# Print out the optional and positional arguments.
+# Note: remove this from your final submission.
+main()
